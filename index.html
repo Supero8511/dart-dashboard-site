@@ -5,10 +5,313 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>기업분석 대시보드</title>
-<style>body{font:16px/1.6 system-ui,"Malgun Gothic",sans-serif;max-width:640px;margin:15vh auto;padding:0 16px;color:#222}</style>
+<!-- 로컬 vendor 사본 우선(setup.bat이 내려받음), 없으면 CDN -->
+<script src="vendor/chart.umd.min.js"
+        onerror="(function(){var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';document.head.appendChild(s);})()"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --up: #d03b3b; --down: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --up: #e66767; --down: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
+  header h1 { font-size: 22px; margin: 0 0 4px; }
+  header .meta { color: var(--ink-2); font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+          padding: 16px 20px; margin-top: 20px; }
+  .card h2 { font-size: 17px; margin: 0 0 4px; }
+  .card .sub { color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 12.5px; }
+  th:first-child, td:first-child { text-align: left; }
+  td.up { color: var(--up); } td.down { color: var(--down); } td.na { color: var(--muted); }
+  a.corp { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); }
+  .chart { position: relative; height: 300px; margin: 8px 0 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid2 .chart { height: 220px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+  .tblwrap { overflow-x: auto; margin-top: 8px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  .empty { color: var(--ink-2); padding: 24px; text-align: center; }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .events { margin: 4px 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .events .ttl { font-size: 12.5px; color: var(--ink-2); margin-right: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 2px 10px;
+          border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px;
+          color: var(--ink); text-decoration: none; background: var(--page); }
+  .chip .d { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chip.t-equity { border-left-color: var(--s2); } .chip.t-mezz { border-left-color: var(--s4); }
+  .chip.t-lawsuit { border-left-color: var(--up); } .chip.t-suspend { border-left-color: var(--ink); }
+  .chip.t-holder { border-left-color: var(--s1); }
+  .events .none { font-size: 12.5px; color: var(--muted); }
+  table.ev td, table.ev th { text-align: left; }
+  .ctbox { margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .ctbox .cthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .ctbox .cthead .ttl { font-size: 14px; font-weight: 600; }
+  .ctbox a { color: var(--ink-2); font-size: 12.5px; }
+  .ctbox p { margin: 4px 0; }
+  .ctbox .mv { color: var(--ink-2); font-size: 13px; }
+  table.ct td, table.ct th { text-align: left; white-space: normal; vertical-align: top; }
+  table.ct .det { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  table.ct td.vf { text-align: center; cursor: help; font-weight: 600; }
+  td.vf.ok { color: var(--s3); } td.vf.warn { color: var(--s4); }
+  .cat { font-size: 12px; padding: 1px 8px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px; white-space: nowrap; }
+  .cat-litigation { border-left-color: var(--up); } .cat-guarantee { border-left-color: var(--s2); }
+  .cat-collateral { border-left-color: var(--s4); } .cat-commitment { border-left-color: var(--s1); }
+  .ctnote { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .rtbox { margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .rtbox .ttl { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: block; }
+  table.rt td, table.rt th { text-align: right; white-space: nowrap; }
+  table.rt td:first-child, table.rt th:first-child { text-align: left; white-space: normal; }
+  table.rt td.hint { cursor: help; }
+  .toc a { font-size: 13px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+           color: var(--ink-2); text-decoration: none; background: var(--surface); }
+</style>
 </head>
 <body>
-<h1>기업분석 대시보드</h1>
-<p>아직 첫 자동 게시 전입니다. 비공개 저장소의 자동 실행(daily-run)이 한 번 끝나면 이 페이지가 대시보드로 바뀝니다.</p>
+<div class="wrap">
+  <header>
+    <h1>기업분석 대시보드 — 분기 손익 YoY</h1>
+    <div class="meta">생성 2026-11-01 06:12 · 원천 DART Open API · 연결(CFS) 우선, 없으면 별도(OFS) · 금액 단위 억원</div>
+    <nav class="toc" id="toc"></nav>
+  </header>
+
+  <section class="card">
+    <h2>최근 분기 요약</h2>
+    <div class="sub">각 사 가장 최근 분기의 전년 동분기 대비 증감률</div>
+    <div class="tblwrap"><table id="summary"></table></div>
+  </section>
+
+  <div id="companies"></div>
+
+  <p class="note">
+    산식: 분기값은 보고서 누적금액 차감(Q4 = 연간 − 3Q 누적) · 영업비용 = 매출액 − 영업이익 ·
+    YoY = (당기 − 전년동기) / |전년동기| · 전년동기가 0 또는 없음이면 공란.
+    금융업(은행·보험·증권)은 매출액 계정이 없어 영업수익으로 매칭되며, 영업비용 정의가 다를 수 있음.<br>
+    이벤트: 주요사항보고서·거래소공시 제목 키워드 분류(유상증자·CB/BW/EB·소송·영업정지·최대주주변경). 칩을 누르면 DART 원문이 열림.
+    종속회사 공시는 '(종속)', 원공시가 조회 기간 밖인 정정공시는 '정정'으로 표시. 이벤트 수집은 run.bat의 events 단계.<br>
+    우발부채·약정 분석은 주석 원문을 LLM(Anthropic API)으로 구조화한 결과이며, 근거 문장과 금액을 원문과 자동 대조해 ✓/⚠ 로 표시함.
+  </p>
+</div>
+
+<script id="data" type="application/json">{"generated": "2026-11-01 06:12", "companies": [{"corp_code": "00266961", "corp_name": "NAVER", "fs_div": "CFS", "rows": [{"year": "2022", "q": 1, "label": "2022 Q1", "revenue": 1845221980257.0, "op_income": 301787213829.0, "net_income": 151398236654.0, "op_cost": 1543434766428.0, "revenue_yoy": 23.09, "op_income_yoy": 4.48, "net_income_yoy": -99.01, "op_cost_yoy": 27.53}, {"year": "2022", "q": 2, "label": "2022 Q2", "revenue": 2045781381874.0, "op_income": 336151055118.0, "net_income": 158474411253.0, "op_cost": 1709630326756.0, "revenue_yoy": 22.98, "op_income_yoy": 0.16, "net_income_yoy": -70.68, "op_cost_yoy": 28.74}, {"year": "2022", "q": 3, "label": "2022 Q3", "revenue": 2057332225258.0, "op_income": 330243307021.0, "net_income": 231554407593.0, "op_cost": 1727088918237.0, "revenue_yoy": 19.11, "op_income_yoy": -5.58, "net_income_yoy": -28.25, "op_cost_yoy": 25.38}, {"year": "2022", "q": 4, "label": "2022 Q4", "revenue": 2271743121421.0, "op_income": 336482834575.0, "net_income": 131753244587.0, "op_cost": 1935260286846.0, "revenue_yoy": 17.85, "op_income_yoy": -4.2, "net_income_yoy": -56.06, "op_cost_yoy": 22.76}, {"year": "2023", "q": 1, "label": "2023 Q1", "revenue": 2280442537690.0, "op_income": 330492062205.0, "net_income": 43655223104.0, "op_cost": 1949950475485.0, "revenue_yoy": 23.59, "op_income_yoy": 9.51, "net_income_yoy": -71.17, "op_cost_yoy": 26.34}, {"year": "2023", "q": 2, "label": "2023 Q2", "revenue": 2407904484962.0, "op_income": 372656459888.0, "net_income": 286715355833.0, "op_cost": 2035248025074.0, "revenue_yoy": 17.7, "op_income_yoy": 10.86, "net_income_yoy": 80.92, "op_cost_yoy": 19.05}, {"year": "2023", "q": 3, "label": "2023 Q3", "revenue": 2445292487206.0, "op_income": 380180743422.0, "net_income": 356206766749.0, "op_cost": 2065111743784.0, "revenue_yoy": 18.86, "op_income_yoy": 15.12, "net_income_yoy": 53.83, "op_cost_yoy": 19.57}, {"year": "2023", "q": 4, "label": "2023 Q4", "revenue": 2537004066727.0, "op_income": 405491004093.0, "net_income": 298440416807.0, "op_cost": 2131513062634.0, "revenue_yoy": 11.68, "op_income_yoy": 20.51, "net_income_yoy": 126.51, "op_cost_yoy": 10.14}, {"year": "2024", "q": 1, "label": "2024 Q1", "revenue": 2526055415876.0, "op_income": 439293106330.0, "net_income": 555803310517.0, "op_cost": 2086762309546.0, "revenue_yoy": 10.77, "op_income_yoy": 32.92, "net_income_yoy": 1173.17, "op_cost_yoy": 7.02}, {"year": "2024", "q": 2, "label": "2024 Q2", "revenue": 2610485920192.0, "op_income": 472685144828.0, "net_income": 332056526993.0, "op_cost": 2137800775364.0, "revenue_yoy": 8.41, "op_income_yoy": 26.84, "net_income_yoy": 15.81, "op_cost_yoy": 5.04}, {"year": "2024", "q": 3, "label": "2024 Q3", "revenue": 2715557161556.0, "op_income": 525269664443.0, "net_income": 530077779234.0, "op_cost": 2190287497113.0, "revenue_yoy": 11.05, "op_income_yoy": 38.16, "net_income_yoy": 48.81, "op_cost_yoy": 6.06}, {"year": "2024", "q": 4, "label": "2024 Q4", "revenue": 2885620767023.0, "op_income": 542015523226.0, "net_income": 514038756209.0, "op_cost": 2343605243797.0, "revenue_yoy": 13.74, "op_income_yoy": 33.67, "net_income_yoy": 72.24, "op_cost_yoy": 9.95}, {"year": "2025", "q": 1, "label": "2025 Q1", "revenue": 2786783351907.0, "op_income": 505301333937.0, "net_income": 423661329790.0, "op_cost": 2281482017970.0, "revenue_yoy": 10.32, "op_income_yoy": 15.03, "net_income_yoy": -23.77, "op_cost_yoy": 9.33}, {"year": "2025", "q": 2, "label": "2025 Q2", "revenue": 2915085056213.0, "op_income": 521553747074.0, "net_income": 497358303760.0, "op_cost": 2393531309139.0, "revenue_yoy": 11.67, "op_income_yoy": 10.34, "net_income_yoy": 49.78, "op_cost_yoy": 11.96}, {"year": "2025", "q": 3, "label": "2025 Q3", "revenue": 3138054569501.0, "op_income": 570646831171.0, "net_income": 734723721225.0, "op_cost": 2567407738330.0, "revenue_yoy": 15.56, "op_income_yoy": 8.64, "net_income_yoy": 38.61, "op_cost_yoy": 17.22}, {"year": "2025", "q": 4, "label": "2025 Q4", "revenue": 3195084241354.0, "op_income": 610636476538.0, "net_income": 163002955240.0, "op_cost": 2584447764816.0, "revenue_yoy": 10.72, "op_income_yoy": 12.66, "net_income_yoy": -68.29, "op_cost_yoy": 10.28}, {"year": "2026", "q": 1, "label": "2026 Q1", "revenue": 3241061102900.0, "op_income": 541757341691.0, "net_income": 291021648791.0, "op_cost": 2699303761209.0, "revenue_yoy": 16.3, "op_income_yoy": 7.21, "net_income_yoy": -31.31, "op_cost_yoy": 18.31}, {"year": "2026", "q": 2, "label": "2026 Q2", "revenue": 3388755080295.0, "op_income": 520309210901.0, "net_income": 704272534295.0, "op_cost": 2868445869394.0, "revenue_yoy": 16.25, "op_income_yoy": -0.24, "net_income_yoy": 41.6, "op_cost_yoy": 19.84}], "events": [{"date": "2026-10-30", "type": "equity", "label": "유상증자", "title": "[기재정정]주요사항보고서(유상증자결정)", "rcept_no": "20261030000001", "sub": false, "corr": true, "recent": true}, {"date": "2026-07-27", "type": "equity", "label": "유상증자", "title": "주요사항보고서(유상증자결정)", "rcept_no": "20260727000001", "sub": false, "corr": false, "recent": true}, {"date": "2025-12-16", "type": "equity", "label": "유상증자", "title": "유상증자결정(종속회사의주요경영사항)", "rcept_no": "20251216801826", "sub": true, "corr": false, "recent": true}, {"date": "2023-05-03", "type": "equity", "label": "유상증자", "title": "유상증자결정(종속회사의주요경영사항)", "rcept_no": "20230503800773", "sub": true, "corr": false, "recent": false}, {"date": "2023-01-06", "type": "equity", "label": "유상증자", "title": "[기재정정]유상증자결정(종속회사의주요경영사항)", "rcept_no": "20230106800004", "sub": true, "corr": true, "recent": false}, {"date": "2022-10-04", "type": "equity", "label": "유상증자", "title": "유상증자결정(종속회사의주요경영사항)", "rcept_no": "20221004800009", "sub": true, "corr": false, "recent": false}, {"date": "2021-12-01", "type": "equity", "label": "유상증자", "title": "유상증자결정(종속회사의주요경영사항)", "rcept_no": "20211201800619", "sub": true, "corr": false, "recent": false}, {"date": "2021-04-29", "type": "equity", "label": "유상증자", "title": "유상증자결정(종속회사의주요경영사항)", "rcept_no": "20210429800004", "sub": true, "corr": false, "recent": false}], "contingent": [], "ratios": [{"current_ratio": 140.9, "quick_ratio": 140.74, "debt_ratio": 40.22, "borrowings": 3650163307863.0, "borrowing_dependence": 10.83, "net_debt": 868767764036.0, "op_income": 1325478171117.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 1379905728836.0, "capex": 805819122644.0, "fcf": 574086606192.0, "financial": false, "debt_parts": "단기차입금+장기차입금+사채", "da_parts": "", "bsns_year": "2021", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2021 연간"}, {"current_ratio": 117.5, "quick_ratio": 117.34, "debt_ratio": 44.56, "borrowings": 3413951888712.0, "borrowing_dependence": 10.07, "net_debt": 689783567004.0, "op_income": 1304664410543.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 1453390444990.0, "capex": 756233974358.0, "fcf": 697156470632.0, "financial": false, "debt_parts": "단기차입금+장기차입금+사채", "da_parts": "", "bsns_year": "2022", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2022 연간"}, {"current_ratio": 111.46, "quick_ratio": 111.22, "debt_ratio": 47.45, "borrowings": 3175284537897.0, "borrowing_dependence": 8.88, "net_debt": -401171995432.0, "op_income": 1488820269608.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 2002233273518.0, "capex": 692261138230.0, "fcf": 1309972135288.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2023", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2023 연간"}, {"current_ratio": 153.88, "quick_ratio": 153.53, "debt_ratio": 41.36, "borrowings": 3205738593516.0, "borrowing_dependence": 8.4, "net_debt": -989786044335.0, "op_income": 1979263438827.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 2589874337746.0, "capex": 580105233034.0, "fcf": 2009769104712.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2024", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2024 연간"}, {"current_ratio": 136.28, "quick_ratio": 136.03, "debt_ratio": 41.9, "borrowings": 1388521164823.0, "borrowing_dependence": 3.38, "net_debt": -4595497634918.0, "op_income": 2208138388720.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 3095806604677.0, "capex": 1319383789510.0, "fcf": 1776422815167.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2025", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2025 연간"}, {"current_ratio": 120.15, "quick_ratio": 119.81, "debt_ratio": 45.21, "borrowings": 3447971233531.0, "borrowing_dependence": 7.68, "net_debt": -2928279951891.0, "op_income": null, "ebitda": null, "net_debt_ebitda": null, "op_cf": null, "capex": null, "fcf": null, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2026", "quarter": 1, "annual": false, "fs_div": "CFS", "label": "2026 Q1"}]}, {"corp_code": "00126380", "corp_name": "삼성전자", "fs_div": "CFS", "rows": [{"year": "2022", "q": 1, "label": "2022 Q1", "revenue": 77781498000000.0, "op_income": 14121409000000.0, "net_income": 11324628000000.0, "op_cost": 63660089000000.0, "revenue_yoy": 18.95, "op_income_yoy": 50.5, "net_income_yoy": 58.57, "op_cost_yoy": 13.67}, {"year": "2022", "q": 2, "label": "2022 Q2", "revenue": 77203607000000.0, "op_income": 14097045000000.0, "net_income": 11098805000000.0, "op_cost": 63106562000000.0, "revenue_yoy": 21.25, "op_income_yoy": 12.18, "net_income_yoy": 15.2, "op_cost_yoy": 23.48}, {"year": "2022", "q": 3, "label": "2022 Q3", "revenue": 76781680000000.0, "op_income": 10852045000000.0, "net_income": 9389198000000.0, "op_cost": 65929635000000.0, "revenue_yoy": 3.79, "op_income_yoy": -31.39, "net_income_yoy": -23.62, "op_cost_yoy": 13.36}, {"year": "2022", "q": 4, "label": "2022 Q4", "revenue": 70464575000000.0, "op_income": 4306131000000.0, "net_income": 23841446000000.0, "op_cost": 66158444000000.0, "revenue_yoy": -7.97, "op_income_yoy": -68.95, "net_income_yoy": 119.98, "op_cost_yoy": 5.52}, {"year": "2023", "q": 1, "label": "2023 Q1", "revenue": 63745371000000.0, "op_income": 640178000000.0, "net_income": 1574600000000.0, "op_cost": 63105193000000.0, "revenue_yoy": -18.05, "op_income_yoy": -95.47, "net_income_yoy": -86.1, "op_cost_yoy": -0.87}, {"year": "2023", "q": 2, "label": "2023 Q2", "revenue": 60005533000000.0, "op_income": 668547000000.0, "net_income": 1723571000000.0, "op_cost": 59336986000000.0, "revenue_yoy": -22.28, "op_income_yoy": -95.26, "net_income_yoy": -84.47, "op_cost_yoy": -5.97}, {"year": "2023", "q": 3, "label": "2023 Q3", "revenue": 67404652000000.0, "op_income": 2433534000000.0, "net_income": 5844171000000.0, "op_cost": 64971118000000.0, "revenue_yoy": -12.21, "op_income_yoy": -77.58, "net_income_yoy": -37.76, "op_cost_yoy": -1.45}, {"year": "2023", "q": 4, "label": "2023 Q4", "revenue": 67779938000000.0, "op_income": 2824717000000.0, "net_income": 6344758000000.0, "op_cost": 64955221000000.0, "revenue_yoy": -3.81, "op_income_yoy": -34.4, "net_income_yoy": -73.39, "op_cost_yoy": -1.82}, {"year": "2024", "q": 1, "label": "2024 Q1", "revenue": 71915601000000.0, "op_income": 6606009000000.0, "net_income": 6754708000000.0, "op_cost": 65309592000000.0, "revenue_yoy": 12.82, "op_income_yoy": 931.9, "net_income_yoy": 328.98, "op_cost_yoy": 3.49}, {"year": "2024", "q": 2, "label": "2024 Q2", "revenue": 74068302000000.0, "op_income": 10443878000000.0, "net_income": 9841345000000.0, "op_cost": 63624424000000.0, "revenue_yoy": 23.44, "op_income_yoy": 1462.18, "net_income_yoy": 470.99, "op_cost_yoy": 7.23}, {"year": "2024", "q": 3, "label": "2024 Q3", "revenue": 79098731000000.0, "op_income": 9183371000000.0, "net_income": 10100904000000.0, "op_cost": 69915360000000.0, "revenue_yoy": 17.35, "op_income_yoy": 277.37, "net_income_yoy": 72.84, "op_cost_yoy": 7.61}, {"year": "2024", "q": 4, "label": "2024 Q4", "revenue": 75788269000000.0, "op_income": 6492703000000.0, "net_income": 7754394000000.0, "op_cost": 69295566000000.0, "revenue_yoy": 11.82, "op_income_yoy": 129.85, "net_income_yoy": 22.22, "op_cost_yoy": 6.68}, {"year": "2025", "q": 1, "label": "2025 Q1", "revenue": 79140503000000.0, "op_income": 6685272000000.0, "net_income": 8222878000000.0, "op_cost": 72455231000000.0, "revenue_yoy": 10.05, "op_income_yoy": 1.2, "net_income_yoy": 21.74, "op_cost_yoy": 10.94}, {"year": "2025", "q": 2, "label": "2025 Q2", "revenue": 74566317000000.0, "op_income": 4676057000000.0, "net_income": 5116435000000.0, "op_cost": 69890260000000.0, "revenue_yoy": 0.67, "op_income_yoy": -55.23, "net_income_yoy": -48.01, "op_cost_yoy": 9.85}, {"year": "2025", "q": 3, "label": "2025 Q3", "revenue": 86061747000000.0, "op_income": 12166062000000.0, "net_income": 12225747000000.0, "op_cost": 73895685000000.0, "revenue_yoy": 8.8, "op_income_yoy": 32.48, "net_income_yoy": 21.04, "op_cost_yoy": 5.69}, {"year": "2025", "q": 4, "label": "2025 Q4", "revenue": 93837371000000.0, "op_income": 20073660000000.0, "net_income": 19641745000000.0, "op_cost": 73763711000000.0, "revenue_yoy": 23.82, "op_income_yoy": 209.17, "net_income_yoy": 153.3, "op_cost_yoy": 6.45}, {"year": "2026", "q": 1, "label": "2026 Q1", "revenue": 133873444000000.0, "op_income": 57232797000000.0, "net_income": 47225272000000.0, "op_cost": 76640647000000.0, "revenue_yoy": 69.16, "op_income_yoy": 756.1, "net_income_yoy": 474.32, "op_cost_yoy": 5.78}, {"year": "2026", "q": 2, "label": "2026 Q2", "revenue": 171499470000000.0, "op_income": 89492412000000.0, "net_income": 71624461000000.0, "op_cost": 82007058000000.0, "revenue_yoy": 130.0, "op_income_yoy": 1813.84, "net_income_yoy": 1299.89, "op_cost_yoy": 17.34}], "events": [{"date": "2021-04-30", "type": "holder", "label": "최대주주변경", "title": "최대주주변경", "rcept_no": "20210430800602", "sub": false, "corr": false, "recent": false}], "contingent": [], "ratios": [{"current_ratio": 247.58, "quick_ratio": 200.62, "debt_ratio": 39.92, "borrowings": 18392149000000.0, "borrowing_dependence": 4.31, "net_debt": -20639266000000.0, "op_income": 51633856000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 65105448000000.0, "capex": 49829021000000.0, "fcf": 15276427000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2021", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2021 연간"}, {"current_ratio": 278.86, "quick_ratio": 212.24, "debt_ratio": 26.41, "borrowings": 10333242000000.0, "borrowing_dependence": 2.3, "net_debt": -39347468000000.0, "op_income": 43376630000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 62181346000000.0, "capex": 53126732000000.0, "fcf": 9054614000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2022", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2022 연간"}, {"current_ratio": 258.77, "quick_ratio": 190.59, "debt_ratio": 25.36, "borrowings": 12685944000000.0, "borrowing_dependence": 2.78, "net_debt": -56394949000000.0, "op_income": 6566976000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 44137427000000.0, "capex": 60534167000000.0, "fcf": -16396740000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2023", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2023 연간"}, {"current_ratio": 243.3, "quick_ratio": 187.84, "debt_ratio": 27.93, "borrowings": 19330184000000.0, "borrowing_dependence": 3.76, "net_debt": -34375395000000.0, "op_income": 32725961000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 72982621000000.0, "capex": 53741639000000.0, "fcf": 19240982000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2024", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2024 연간"}, {"current_ratio": 232.76, "quick_ratio": 183.3, "debt_ratio": 29.94, "borrowings": 25239139000000.0, "borrowing_dependence": 4.45, "net_debt": -32617239000000.0, "op_income": 43601051000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 85315148000000.0, "capex": 52153149000000.0, "fcf": 33161999000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2025", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2025 연간"}, {"current_ratio": 253.91, "quick_ratio": 205.58, "debt_ratio": 30.15, "borrowings": 28138794000000.0, "borrowing_dependence": 4.44, "net_debt": -45167957000000.0, "op_income": null, "ebitda": null, "net_debt_ebitda": null, "op_cf": null, "capex": null, "fcf": null, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2026", "quarter": 1, "annual": false, "fs_div": "CFS", "label": "2026 Q1"}]}, {"corp_code": "00164742", "corp_name": "현대자동차", "fs_div": "CFS", "rows": [{"year": "2022", "q": 1, "label": "2022 Q1", "revenue": 30298568000000.0, "op_income": 1928930000000.0, "net_income": 1777376000000.0, "op_cost": 28369638000000.0, "revenue_yoy": 10.62, "op_income_yoy": 16.44, "net_income_yoy": 16.76, "op_cost_yoy": 10.24}, {"year": "2022", "q": 2, "label": "2022 Q2", "revenue": 35999896000000.0, "op_income": 2979794000000.0, "net_income": 3084826000000.0, "op_cost": 33020102000000.0, "revenue_yoy": 18.71, "op_income_yoy": 58.0, "net_income_yoy": 55.59, "op_cost_yoy": 16.1}, {"year": "2022", "q": 3, "label": "2022 Q3", "revenue": 37705442000000.0, "op_income": 1551819000000.0, "net_income": 1411490000000.0, "op_cost": 36153623000000.0, "revenue_yoy": 30.62, "op_income_yoy": -3.41, "net_income_yoy": null, "op_cost_yoy": 32.62}, {"year": "2022", "q": 4, "label": "2022 Q4", "revenue": 38523629000000.0, "op_income": 3359226000000.0, "net_income": 1709922000000.0, "op_cost": 35164403000000.0, "revenue_yoy": 24.16, "op_income_yoy": 119.61, "net_income_yoy": null, "op_cost_yoy": 19.21}, {"year": "2023", "q": 1, "label": "2023 Q1", "revenue": 37778693000000.0, "op_income": 3592699000000.0, "net_income": 3419403000000.0, "op_cost": 34185994000000.0, "revenue_yoy": 24.69, "op_income_yoy": 86.25, "net_income_yoy": 92.38, "op_cost_yoy": 20.5}, {"year": "2023", "q": 2, "label": "2023 Q2", "revenue": 42249695000000.0, "op_income": 4237931000000.0, "net_income": 3346813000000.0, "op_cost": 38011764000000.0, "revenue_yoy": 17.36, "op_income_yoy": 42.22, "net_income_yoy": 8.49, "op_cost_yoy": 15.12}, {"year": "2023", "q": 3, "label": "2023 Q3", "revenue": 41002663000000.0, "op_income": 3821799000000.0, "net_income": 3303451000000.0, "op_cost": 37180864000000.0, "revenue_yoy": 8.74, "op_income_yoy": 146.28, "net_income_yoy": 134.04, "op_cost_yoy": 2.84}, {"year": "2023", "q": 4, "label": "2023 Q4", "revenue": 41632528000000.0, "op_income": 3474472000000.0, "net_income": 2202634000000.0, "op_cost": 38158056000000.0, "revenue_yoy": 8.07, "op_income_yoy": 3.43, "net_income_yoy": 28.81, "op_cost_yoy": 8.51}, {"year": "2024", "q": 1, "label": "2024 Q1", "revenue": 40658539000000.0, "op_income": 3557362000000.0, "net_income": 3376001000000.0, "op_cost": 37101177000000.0, "revenue_yoy": 7.62, "op_income_yoy": -0.98, "net_income_yoy": -1.27, "op_cost_yoy": 8.53}, {"year": "2024", "q": 2, "label": "2024 Q2", "revenue": 45020581000000.0, "op_income": 4279136000000.0, "net_income": 4173900000000.0, "op_cost": 40741445000000.0, "revenue_yoy": 6.56, "op_income_yoy": 0.97, "net_income_yoy": 24.71, "op_cost_yoy": 7.18}, {"year": "2024", "q": 3, "label": "2024 Q3", "revenue": 42928332000000.0, "op_income": 3580900000000.0, "net_income": 3205850000000.0, "op_cost": 39347432000000.0, "revenue_yoy": 4.7, "op_income_yoy": -6.3, "net_income_yoy": -2.95, "op_cost_yoy": 5.83}, {"year": "2024", "q": 4, "label": "2024 Q4", "revenue": 46623701000000.0, "op_income": 2822194000000.0, "net_income": 2474157000000.0, "op_cost": 43801507000000.0, "revenue_yoy": 11.99, "op_income_yoy": -18.77, "net_income_yoy": 12.33, "op_cost_yoy": 14.79}, {"year": "2025", "q": 1, "label": "2025 Q1", "revenue": 44407761000000.0, "op_income": 3633609000000.0, "net_income": 3382174000000.0, "op_cost": 40774152000000.0, "revenue_yoy": 9.22, "op_income_yoy": 2.14, "net_income_yoy": 0.18, "op_cost_yoy": 9.9}, {"year": "2025", "q": 2, "label": "2025 Q2", "revenue": 48286677000000.0, "op_income": 3601597000000.0, "net_income": 3250390000000.0, "op_cost": 44685080000000.0, "revenue_yoy": 7.25, "op_income_yoy": -15.83, "net_income_yoy": -22.13, "op_cost_yoy": 9.68}, {"year": "2025", "q": 3, "label": "2025 Q3", "revenue": 46721448000000.0, "op_income": 2537266000000.0, "net_income": 2548183000000.0, "op_cost": 44184182000000.0, "revenue_yoy": 8.84, "op_income_yoy": -29.14, "net_income_yoy": -20.51, "op_cost_yoy": 12.29}, {"year": "2025", "q": 4, "label": "2025 Q4", "revenue": 46838586000000.0, "op_income": 1695379000000.0, "net_income": 1184028000000.0, "op_cost": 45143207000000.0, "revenue_yoy": 0.46, "op_income_yoy": -39.93, "net_income_yoy": -52.14, "op_cost_yoy": 3.06}, {"year": "2026", "q": 1, "label": "2026 Q1", "revenue": 45938886000000.0, "op_income": 2514686000000.0, "net_income": 2584926000000.0, "op_cost": 43424200000000.0, "revenue_yoy": 3.45, "op_income_yoy": -30.79, "net_income_yoy": -23.57, "op_cost_yoy": 6.5}, {"year": "2026", "q": 2, "label": "2026 Q2", "revenue": 49215328000000.0, "op_income": 2850888000000.0, "net_income": 2887962000000.0, "op_cost": 46364440000000.0, "revenue_yoy": 1.92, "op_income_yoy": -20.84, "net_income_yoy": -11.15, "op_cost_yoy": 3.76}], "events": [], "contingent": [], "ratios": [{"current_ratio": 137.87, "quick_ratio": 119.74, "debt_ratio": 183.17, "borrowings": 107793278000000.0, "borrowing_dependence": 46.08, "net_debt": 94997724000000.0, "op_income": 6678949000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": -1176416000000.0, "capex": 5861327000000.0, "fcf": -7037743000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2021", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2021 연간"}, {"current_ratio": 129.84, "quick_ratio": 110.59, "debt_ratio": 181.36, "borrowings": 112185820000000.0, "borrowing_dependence": 43.87, "net_debt": 91320941000000.0, "op_income": 9819769000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": 10627311000000.0, "capex": 5733702000000.0, "fcf": 4893609000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2022", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2022 연간"}, {"current_ratio": 138.66, "quick_ratio": 114.94, "debt_ratio": 177.44, "borrowings": 124747959000000.0, "borrowing_dependence": 44.16, "net_debt": 105581340000000.0, "op_income": 15126901000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": -2518760000000.0, "capex": 8851181000000.0, "fcf": -11369941000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2023", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2023 연간"}, {"current_ratio": 145.6, "quick_ratio": 120.71, "debt_ratio": 182.52, "borrowings": 156489360000000.0, "borrowing_dependence": 46.05, "net_debt": 137474416000000.0, "op_income": 14239592000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": -5661641000000.0, "capex": 10367455000000.0, "fcf": -16029096000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2024", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2024 연간"}, {"current_ratio": 136.35, "quick_ratio": 113.02, "debt_ratio": 188.95, "borrowings": 175389838000000.0, "borrowing_dependence": 47.55, "net_debt": 157029272000000.0, "op_income": 11467851000000.0, "ebitda": null, "net_debt_ebitda": null, "op_cf": -5991270000000.0, "capex": 11069856000000.0, "fcf": -17061126000000.0, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2025", "quarter": 4, "annual": true, "fs_div": "CFS", "label": "2025 연간"}, {"current_ratio": 131.37, "quick_ratio": 107.9, "debt_ratio": 190.28, "borrowings": 183262802000000.0, "borrowing_dependence": 47.75, "net_debt": 164286057000000.0, "op_income": null, "ebitda": null, "net_debt_ebitda": null, "op_cf": null, "capex": null, "fcf": null, "financial": false, "debt_parts": "단기차입금+유동성장기부채+장기차입금+사채", "da_parts": "", "bsns_year": "2026", "quarter": 1, "annual": false, "fs_div": "CFS", "label": "2026 Q1"}]}]}</script>
+<script>
+window.addEventListener('load', function () {
+  const DATA = JSON.parse(document.getElementById('data').textContent);
+  const hasChart = typeof Chart !== 'undefined';
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const METRICS = [
+    { key: 'revenue',    name: '매출액',   color: '--s1' },
+    { key: 'op_cost',    name: '영업비용', color: '--s2' },
+    { key: 'op_income',  name: '영업이익', color: '--s3' },
+    { key: 'net_income', name: '순이익',   color: '--s4' },
+  ];
+  const fmtEok = (v) => v == null ? '–' : Math.round(v / 1e8).toLocaleString('ko-KR');
+  const fmtPct = (v) => v == null ? '–' : (v > 0 ? '▲ ' : v < 0 ? '▼ ' : '') + Math.abs(v).toFixed(1) + '%';
+  const cls = (v) => v == null ? 'na' : v > 0 ? 'up' : v < 0 ? 'down' : '';
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  if (!DATA.companies.length) {
+    document.getElementById('companies').innerHTML =
+      '<div class="card empty">데이터가 없습니다. run.bat 로 수집을 먼저 실행하세요.</div>';
+    return;
+  }
+  if (!hasChart) {
+    const n = document.createElement('div');
+    n.className = 'card'; n.style.color = 'var(--up)';
+    n.textContent = '차트 라이브러리(Chart.js)를 불러오지 못했습니다. 인터넷 연결 후 새로고침하거나 setup.bat을 다시 실행하세요. 표는 정상 표시됩니다.';
+    document.querySelector('header').after(n);
+  }
+
+  // ---- 공통 Chart.js 옵션
+  if (hasChart) {
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = css('--ink-2');
+  }
+  const baseOpts = (yTitle, tickFmt) => ({
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true } },
+      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${tickFmt(c.parsed.y)}` } },
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: css('--axis') }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+      y: { grid: { color: css('--grid') }, border: { display: false },
+           title: { display: !!yTitle, text: yTitle, color: css('--muted') },
+           ticks: { callback: (v) => tickFmt(v) } },
+    },
+  });
+  const pctTick = (v) => (v == null ? '–' : (Math.round(v * 10) / 10).toLocaleString('ko-KR') + '%');
+  const eokTick = (v) => (v == null ? '–' : Math.round(v / 1e8).toLocaleString('ko-KR'));
+
+  // ---- TOC
+  const toc = document.getElementById('toc');
+  DATA.companies.forEach(c => {
+    const a = document.createElement('a'); a.href = '#c-' + c.corp_code; a.textContent = c.corp_name; toc.appendChild(a);
+  });
+
+  // ---- 요약 표
+  const latest = (c) => [...c.rows].reverse().find(r => r.revenue != null || r.op_income != null);
+  let html = '<thead><tr><th>회사</th><th>최근 분기</th>' + METRICS.map(m => `<th>${m.name} YoY</th>`).join('') + '<th>최근 1년 이벤트</th></tr></thead><tbody>';
+  const evSummary = (c) => {
+    const cnt = {};
+    (c.events || []).filter(e => e.recent).forEach(e => { cnt[e.label] = (cnt[e.label] || 0) + 1; });
+    const parts = Object.keys(cnt).map(k => `${esc(k)} ${cnt[k]}`);
+    return parts.length ? `<td style="text-align:left">${parts.join(' · ')}</td>` : '<td class="na" style="text-align:left">–</td>';
+  };
+  DATA.companies.forEach(c => {
+    const r = latest(c);
+    html += `<tr><td><a class="corp" href="#c-${c.corp_code}">${esc(c.corp_name)}</a></td>`;
+    if (!r) { html += '<td colspan="5" class="na">데이터 없음</td>' + evSummary(c) + '</tr>'; return; }
+    html += `<td>${r.label}</td>` + METRICS.map(m => `<td class="${cls(r[m.key + '_yoy'])}">${fmtPct(r[m.key + '_yoy'])}</td>`).join('') + evSummary(c) + '</tr>';
+  });
+  document.getElementById('summary').innerHTML = html + '</tbody>';
+
+  // ---- 회사별 카드
+  const root = document.getElementById('companies');
+  DATA.companies.forEach(c => {
+    const sec = document.createElement('section');
+    sec.className = 'card'; sec.id = 'c-' + c.corp_code;
+    const first = c.rows[0], last = c.rows[c.rows.length - 1];
+    sec.innerHTML = `
+      <h2>${esc(c.corp_name)}</h2>
+      <div class="sub">${first ? first.label : ''} ~ ${last ? last.label : ''} · ${c.fs_div === 'CFS' ? '연결' : '별도'} 기준</div>
+      <div class="events" id="ev-${c.corp_code}"></div>
+      ${hasChart ? `
+      <div class="chart"><canvas id="yoy-${c.corp_code}"></canvas></div>
+      <div class="grid2">
+        <div class="chart"><canvas id="abs1-${c.corp_code}"></canvas></div>
+        <div class="chart"><canvas id="abs2-${c.corp_code}"></canvas></div>
+      </div>` : ''}
+      <div class="rtbox" id="rt-${c.corp_code}" hidden></div>
+      <div class="ctbox" id="ct-${c.corp_code}" hidden></div>
+      <details ${hasChart ? '' : 'open'}><summary>분기별 수치 표 보기</summary><div class="tblwrap"><table id="tbl-${c.corp_code}"></table></div></details>`;
+    root.appendChild(sec);
+
+    // 이벤트 (카드 상단): 최근 1년 칩 + 전체 이력 접기
+    const chip = (e) => `<a class="chip t-${e.type}" target="_blank" rel="noopener" title="${esc(e.title)}"
+        href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${e.rcept_no}"><span class="d">${e.date}</span>${esc(e.label)}${e.sub ? ' (종속)' : ''}${e.corr ? ' · 정정' : ''}</a>`;
+    const evs = c.events || [], recent = evs.filter(e => e.recent), older = evs.filter(e => !e.recent);
+    let eh = '<span class="ttl">최근 1년 이벤트</span>' + (recent.length ? recent.map(chip).join('') : '<span class="none">해당 없음</span>');
+    if (older.length) eh += `<details style="width:100%"><summary>이전 이벤트 ${older.length}건</summary><div class="events" style="margin-top:6px">${older.map(chip).join('')}</div></details>`;
+    document.getElementById('ev-' + c.corp_code).innerHTML = eh;
+
+    // 우발부채·약정 (4단계 LLM 분석): 최신 보고서는 펼쳐서, 이전 보고서는 접어서. ⚠ = 근거/금액이 원문에서 확인되지 않음
+    const cts = c.contingent || [];
+    if (cts.length) {
+      const dart = (r) => 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=' + r;
+      const rowsHtml = (a) => a.items.map(it => `<tr>
+        <td><span class="cat cat-${esc(it.category)}">${esc(it.cat_label || '기타')}</span></td>
+        <td>${esc(it.title)}${it.counterparty ? ' · ' + esc(it.counterparty) : ''}<div class="det">${esc(it.detail)}</div></td>
+        <td>${it.amount_text ? esc(it.amount_text) + (it.amount_krw != null ? ` <span class="na">(${fmtEok(it.amount_krw)}억원)</span>` : '') : '–'}</td>
+        <td>${it.status ? esc(it.status) : '–'}</td>
+        <td class="vf ${it.verified ? 'ok' : 'warn'}" title="${esc(it.evidence)}">${it.verified ? '✓' : '⚠'}</td></tr>`).join('');
+      const a = cts[0], old = cts.slice(1);
+      let h = `<div class="cthead"><span class="ttl">우발부채·약정 (LLM 분석)</span>
+        <a href="${dart(a.rcept_no)}" target="_blank" rel="noopener">${esc(a.label)} 원문</a>
+        <span class="na">· ${esc(a.model || '')}</span></div>
+        <p>${esc(a.summary)}</p>${a.management_view ? `<p class="mv">경영진 평가(원문): ${esc(a.management_view)}</p>` : ''}`;
+      h += a.items.length
+        ? `<div class="tblwrap"><table class="ct"><thead><tr><th>구분</th><th>내용</th><th>금액</th><th>상태</th><th>원문 대조</th></tr></thead><tbody>${rowsHtml(a)}</tbody></table></div>`
+        : '<p class="na">식별된 항목 없음</p>';
+      h += `<div class="ctnote">✓ 근거 문장·금액이 원문에서 확인됨 / ⚠ 확인되지 않음(직접 확인 필요). 마우스를 올리면 근거 문장이 보입니다. LLM 추출 결과이므로 중요한 판단 전에는 원문을 확인하세요.${a.truncated ? ' · 입력이 길어 일부만 분석됨' : ''}</div>`;
+      if (old.length) {
+        h += `<details><summary>이전 보고서 ${old.length}건</summary>` + old.map(o =>
+          `<p><b>${esc(o.label)}</b> · 항목 ${o.items.length}건${o.items.some(i => !i.verified) ? ' · ⚠ 포함' : ''}
+           · <a href="${dart(o.rcept_no)}" target="_blank" rel="noopener">원문</a><br>${esc(o.summary)}</p>`).join('') + '</details>';
+      }
+      const box = document.getElementById('ct-' + c.corp_code);
+      box.innerHTML = h; box.hidden = false;
+    }
+
+    // 재무건전성 비율 (코드 계산): 최근 연간 보고서 + 최신 중간보고서. EBITDA·FCF 는 연간만(분기 누적 현금흐름을 연환산하지 않음)
+    const rts = c.ratios || [];
+    if (rts.length) {
+      const box = document.getElementById('rt-' + c.corp_code);
+      if (rts.every(p => p.financial)) {
+        box.innerHTML = '<span class="ttl">재무건전성 비율</span><p class="na">금융업(유동/비유동 구분 없음)은 일반 기업 지표를 적용하지 않습니다. 업종 전용 지표는 별도 기준(SPEC §9)으로 추가 예정.</p>';
+      } else {
+        const f1 = (v) => v == null ? '–' : v.toLocaleString('ko-KR', {maximumFractionDigits: 1});
+        const fx = (v) => v == null ? '–' : v.toLocaleString('ko-KR', {maximumFractionDigits: 2}) + '배';
+        const spec = [
+          ['유동비율 (%)', 'current_ratio', f1, '유동자산 ÷ 유동부채'],
+          ['당좌비율 (%)', 'quick_ratio', f1, '(유동자산 − 재고자산) ÷ 유동부채'],
+          ['부채비율 (%)', 'debt_ratio', f1, '부채총계 ÷ 자본총계'],
+          ['차입금의존도 (%)', 'borrowing_dependence', f1, '차입금 ÷ 자산총계. 차입금 = 단기차입금 + 유동성장기부채 + 장기차입금 + 사채 (리스부채 제외)'],
+          ['순차입금 (억원)', 'net_debt', fmtEok, '차입금 − 현금및현금성자산 (단기금융상품은 차감하지 않음)'],
+          ['EBITDA (억원)', 'ebitda', fmtEok, '영업이익 + 감가상각비 + 무형자산상각비 + 사용권자산상각비 · 연간만'],
+          ['순차입금/EBITDA', 'net_debt_ebitda', fx, '순차입금 ÷ EBITDA (EBITDA가 0 이하이면 산출 안 함) · 연간만'],
+          ['영업활동현금흐름 (억원)', 'op_cf', fmtEok, '연간만'],
+          ['CAPEX (억원)', 'capex', fmtEok, '유형자산 취득 + 무형자산 취득 · 연간만'],
+          ['FCF (억원)', 'fcf', fmtEok, '영업활동현금흐름 − CAPEX · 연간만'],
+        ];
+        let h = '<span class="ttl">재무건전성 비율</span><div class="tblwrap"><table class="rt"><thead><tr><th></th>' +
+          rts.map(p => `<th>${esc(p.label)}</th>`).join('') + '</tr></thead><tbody>';
+        spec.forEach(([name, key, fmt, tip]) => {
+          h += `<tr><td title="${esc(tip)}">${esc(name)}</td>` + rts.map(p => `<td class="hint" title="${esc(tip)}">${fmt(p[key])}</td>`).join('') + '</tr>';
+        });
+        h += '</tbody></table></div><div class="ctnote">DART 연결재무제표(없으면 별도)에서 계산한 값입니다. 항목 이름이 회사마다 달라 일부 값은 비어 있을 수 있고(–), 중간보고서는 현금흐름이 누적값이라 연환산하지 않고 비워 둡니다. 숫자 위에 마우스를 올리면 계산식이 보입니다.</div>';
+        box.innerHTML = h;
+      }
+      box.hidden = false;
+    }
+
+    // 표 (차트 없어도 항상)
+    let t = '<thead><tr><th>분기</th>' + METRICS.map(m => `<th>${m.name}</th><th>YoY</th>`).join('') + '</tr></thead><tbody>';
+    [...c.rows].reverse().forEach(r => {
+      t += `<tr><td>${r.label}</td>` + METRICS.map(m =>
+        `<td>${fmtEok(r[m.key])}</td><td class="${cls(r[m.key + '_yoy'])}">${fmtPct(r[m.key + '_yoy'])}</td>`).join('') + '</tr>';
+    });
+    document.getElementById('tbl-' + c.corp_code).innerHTML = t + '</tbody>';
+    if (!hasChart) return;
+
+    const labels = c.rows.map(r => r.label);
+    const line = (m) => ({
+      label: m.name, data: c.rows.map(r => r[m.key + '_yoy']),
+      borderColor: css(m.color), backgroundColor: css(m.color),
+      borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, spanGaps: false, tension: 0,
+    });
+    new Chart(document.getElementById('yoy-' + c.corp_code), {
+      type: 'line', data: { labels, datasets: METRICS.map(line) },
+      options: Object.assign(baseOpts('YoY (%)', pctTick), { plugins: Object.assign(baseOpts('', pctTick).plugins, {
+        title: { display: true, text: '전년 동분기 대비 증감률', align: 'start', color: css('--ink'), font: { weight: '600', size: 13 } },
+      }) }),
+    });
+
+    const bar = (m) => ({
+      label: m.name, data: c.rows.map(r => r[m.key]),
+      backgroundColor: css(m.color), borderRadius: 3, borderSkipped: 'bottom', maxBarThickness: 18,
+    });
+    const barChart = (id, ms, title) => new Chart(document.getElementById(id), {
+      type: 'bar', data: { labels, datasets: ms.map(bar) },
+      options: Object.assign(baseOpts('억원', eokTick), { plugins: Object.assign(baseOpts('', eokTick).plugins, {
+        title: { display: true, text: title, align: 'start', color: css('--ink'), font: { weight: '600', size: 13 } },
+      }) }),
+    });
+    barChart('abs1-' + c.corp_code, [METRICS[0], METRICS[1]], '매출액 · 영업비용 (억원)');
+    barChart('abs2-' + c.corp_code, [METRICS[2], METRICS[3]], '영업이익 · 순이익 (억원)');
+  });
+});
+</script>
 </body>
 </html>
